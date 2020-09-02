@@ -3,192 +3,289 @@
 <style>
 
 body {
-  font: 10px sans-serif;
-  margin: 0;
+  font: 14px sans-serif;
 }
 
-path.line {
+.axis path,
+.axis line {
   fill: none;
-  stroke: #666;
+  stroke: #000;
   stroke-width: 1.5px;
-}
-
-path.area {
-  fill: #e7e7e7;
-}
-
-.axis {
   shape-rendering: crispEdges;
 }
 
-.x.axis line {
-  stroke: #fff;
-}
-
-.x.axis .minor {
-  stroke-opacity: .5;
-}
-
-.x.axis path {
-  display: none;
-}
-
-.y.axis line, .y.axis path {
+.line {
   fill: none;
+  stroke: steelblue;
+  stroke-width: 3.5px;
+}
+
+.dot {
   stroke: #000;
 }
-.guideline {
-  margin-right: 100px;
-  float: right;
+
+div.tooltip {   
+  position: absolute;           
+  text-align: center;           
+  width: 80px;                  
+  height: 55px;                 
+  padding: 4px;             
+  font: 16px sans-serif;  
+  color: white;   
+  font-weight: 500;   
+  background: black;   
+  border: 0px;      
+  border-radius: 4px;           
+  pointer-events: none;         
+}
+
+/* http://www.d3noob.org/2013/01/adding-grid-lines-to-d3js-graph.html */
+.grid .tick {
+    stroke: lightgrey;
+    opacity: 0.7;
 }
 
 </style>
 <body>
-<!-- <label class="guideline">
-  Show Guideline & Curtain
-  <input type="checkbox" id="show_guideline" />
-</label> -->
-<svg></svg>
-<script src="https://d3js.org/d3.v3.min.js"></script>
+<script src="http://d3js.org/d3.v3.js"></script>
 <script>
 
-var margin = {top: 80, right: 80, bottom: 80, left: 80},
-    width = 960 - margin.left - margin.right,
-    height = 500 - margin.top - margin.bottom;
+//I increased the bottom margin a little bit because the x label is tied to it; so I could lower the x label a little bit
+var margin = {top: 50, right: 20, bottom: 60, left: 90},
+    width = 600 - margin.left - margin.right,
+    height = 400 - margin.top - margin.bottom;
 
-var parse = d3.time.format("%b %Y").parse;
+var x = d3.time.scale()
+    .range([0, width]);
 
-// Scales and axes. Note the inverted domain for the y-scale: bigger is up!
-var x = d3.time.scale().range([0, width]),
-    y = d3.scale.linear().range([height, 0]),
-    xAxis = d3.svg.axis().scale(x).tickSize(-height).tickSubdivide(true),
-    yAxis = d3.svg.axis().scale(y).ticks(4).orient("right");
+var y = d3.scale.linear()
+    .range([height, 0]);
 
-// An area generator, for the light fill.
-var area = d3.svg.area()
-    .interpolate("monotone")
-    .x(function(d) { return x(d.date); })
-    .y0(height)
-    .y1(function(d) { return y(d.price); 
-    });
+var xAxis = d3.svg.axis()
+    .scale(x)
+	.ticks(d3.time.hours,24)
+	//makes the xAxis ticks a little longer than the xMinorAxis ticks
+    .tickSize(10)
+    .orient("bottom");
 
-// A line generator, for the dark stroke.
+var xMinorAxis = d3.svg.axis()
+    .scale(x)
+	.ticks(d3.time.hours,12)
+    .orient("bottom");
+
+var yAxis = d3.svg.axis()
+    .scale(y)
+    .orient("left");
+
 var line = d3.svg.line()
-    .interpolate("monotone")
     .x(function(d) { return x(d.date); })
-    .y(function(d) { return y(d.price); });
+    .y(function(d) { return y(d.total_km); });
 
-d3.csv("readme.csv", type, function(error, data) {
+var div = d3.select("body").append("div")   
+    .attr("class", "tooltip")               
+    .style("opacity", 0);
 
-  // Filter to one symbol; the S&P 500.
-  var values = data.filter(function(d) {
-    return d.symbol == "AMZN";;
+var svg = d3.select("body").append("svg")
+    .attr("width", width + margin.left + margin.right)
+    .attr("height", height + margin.top + margin.bottom)
+  .append("g")
+    .attr("transform", "translate(" + margin.left + "," + margin.top + ")");
+
+//The format in the CSV, which d3 will read
+var parseDate = d3.time.format("%Y-%m-%d %X");
+
+//format for tooltip
+//https://github.com/mbostock/d3/wiki/Time-Formatting
+//var formatTime = d3.time.format("%e %b");
+var formatTime = d3.time.format("%e %b %-I:%M %p");
+var formatCount = d3.format(",");
+
+// function for the y grid lines
+function make_y_axis() {
+  return d3.svg.axis()
+      .scale(y)
+      .orient("left")
+      //.ticks(5)
+}
+
+//reading in CSV which contains data
+d3.csv("roads_built.csv", function(error, data) {
+  data.forEach(function(d) {
+    //console.log(d.date_time)
+    d.date = parseDate.parse(d.date_time);
+	console.log(d.date);
+    d.total_km = +d.total_km;
+    console.log(d.total_km);
   });
 
-  var msft = data.filter(function(d) {
-    return d.symbol == "MSFT";
-  });
+  //using imported data to define extent of x and y domains
+  x.domain(d3.extent(data, function(d) { return d.date; }));
+  y.domain(d3.extent(data, function(d) { return d.total_km; }));
 
-  var ibm = data.filter(function(d) {
-    return d.symbol == 'IBM';
-  });
+// Draw the y Grid lines
+	svg.append("g")            
+		.attr("class", "grid")
+		.call(make_y_axis()
+			.tickSize(-width, 0, 0)
+			.tickFormat("")
+		)
+  
+  svg.append("path")
+      .datum(data)
+      .attr("class", "line")
+      .attr("d", line);
 
-  // Compute the minimum and maximum date, and the maximum price.
-  x.domain([values[0].date, values[values.length - 1].date]);
-  y.domain([0, d3.max(values, function(d) { return d.price; })]).nice();
+//taken from http://bl.ocks.org/mbostock/3887118
+//and http://www.d3noob.org/2013/01/change-line-chart-into-scatter-plot.html
+//creating a group(g) and will append a circle and 2 lines inside each group
+var g = svg.selectAll()
+        .data(data).enter().append("g");
 
-  // Add an SVG element with the desired dimensions and margin.
-  var svg = d3.select("svg")
-      .attr("width", width + margin.left + margin.right)
-      .attr("height", height + margin.top + margin.bottom)
-    .append("g")
-      .attr("transform", "translate(" + margin.left + "," + margin.top + ")")
+   //The markers on the line
+	 g.append("circle")
+         //circle radius is increased
+        .attr("r", 4.5)
+        .attr("cx", function(d) { return x(d.date); })
+        .attr("cy", function(d) { return y(d.total_km); });
+   
+   //The horizontal dashed line that appears when a circle marker is moused over
+	 g.append("line")
+        .attr("class", "x")
+        .attr("id", "dashedLine")
+        .style("stroke", "steelblue")
+        .style("stroke-dasharray", "3,3")
+        .style("opacity", 0)
+        .attr("x1", function(d) { return x(d.date); })
+        .attr("y1", function(d) { return y(d.total_km); })
+		    //d3.min gets the min date from the date x-axis scale
+		    .attr("x2", function(d) { return x(d3.min(x)); })
+        .attr("y2", function(d) { return y(d.total_km); });
 
-  // Add the clip path.
-  svg.append("clipPath")
-      .attr("id", "clip")
-    .append("rect")
-      .attr("width", width)
-      .attr("height", height);
+  //The vertical dashed line that appears when a circle marker is moused over
+	g.append("line")
+        .attr("class", "y")
+        .attr("id", "dashedLine")
+        .style("stroke", "steelblue")
+        .style("stroke-dasharray", "3,3")
+        .style("opacity", 0)
+        .attr("x1", function(d) { return x(d.date); })
+        .attr("y1", function(d) { return y(d.total_km); })
+		    .attr("x2", function(d) { return x(d.date); })
+        .attr("y2", height);
+    
+   //circles are selected again to add the mouseover functions
+ 	 g.selectAll("circle")
+			.on("mouseover", function(d) {		
+            div.transition()		
+               .duration(200)		
+               .style("opacity", .9);	
+            div.html(formatCount(d.total_km) + " km" + "<br/>" + formatTime(d.date))	
+               .style("left", (d3.event.pageX - 20) + "px")
+      		     .style("top", (d3.event.pageY + 6) + "px");
+	          //selects the horizontal dashed line in the group
+			      d3.select(this.nextElementSibling).transition()		
+                .duration(200)		
+                .style("opacity", .9);
+            //selects the vertical dashed line in the group
+			      d3.select(this.nextElementSibling.nextElementSibling).transition()		
+                .duration(200)		
+                .style("opacity", .9);	
+            })	
+				
+      .on("mouseout", function(d) {		
+            div.transition()		
+               .duration(500)		
+               .style("opacity", 0);
 
-  // Add the x-axis.
-  svg.append("g")
+			      d3.select(this.nextElementSibling).transition()		
+                .duration(500)		
+                .style("opacity", 0);
+
+			      d3.select(this.nextElementSibling.nextElementSibling).transition()		
+                .duration(500)		
+                .style("opacity", 0);	
+        });
+
+svg.append("g")
       .attr("class", "x axis")
       .attr("transform", "translate(0," + height + ")")
-      .call(xAxis);
+      .call(xAxis)
+	    .selectAll(".tick text")
+      .call(wrap, 35);
 
-  // Add the y-axis.
-  svg.append("g")
+svg.append("g")
+    .attr("class","xMinorAxis")
+    .attr("transform", "translate(0," + height + ")")
+    .style({ 'stroke': 'Black', 'fill': 'none', 'stroke-width': '1px'})
+    .call(xMinorAxis)
+    .selectAll("text").remove();
+
+//http://www.d3noob.org/2012/12/adding-axis-labels-to-d3js-graph.html
+svg.append("text")      // text label for the x-axis
+        .attr("x", width / 2 )
+        .attr("y",  height + margin.bottom)
+        .style("text-anchor", "middle")
+        .text("Date");
+
+svg.append("text")      // text label for the y-axis
+        .attr("y",30 - margin.left)
+        .attr("x",50 - (height / 2))
+        .attr("transform", "rotate(-90)")
+        .style("text-anchor", "end")
+        .style("font-size", "16px")
+        .text("road length (km)");
+
+//http://www.d3noob.org/2013/01/adding-title-to-your-d3js-graph.html
+svg.append("text")      // text label for chart Title
+        .attr("x", width / 2 )
+        .attr("y", 0 - (margin.top/2))
+        .style("text-anchor", "middle")
+		.style("font-size", "16px") 
+        .style("text-decoration", "underline") 
+        .text("Pandora Road Construction");
+
+
+svg.append("g")
       .attr("class", "y axis")
-      .attr("transform", "translate(" + width + ",0)")
-      .call(yAxis);
+      .call(yAxis)
+    //text label for the y-axis inside chart
+    /*
+    .append("text")
+      .attr("transform", "rotate(-90)")
+      .attr("y", 6)
+      .attr("dy", ".71em")
+      .style("text-anchor", "end")
+      .style("font-size", "16px") 
+      .style("background-color","red")
+      .text("road length (km)");
+    */
 
-
-  var colors = d3.scale.category10();
-  svg.selectAll('.line')
-    .data([values, msft, ibm])
-    .enter()
-      .append('path')
-        .attr('class', 'line')
-        .style('stroke', function(d) {
-          return colors(Math.random() * 50);
-        })
-        .attr('clip-path', 'url(#clip)')
-        .attr('d', function(d) {
-          return line(d);
-        })
-
-  /* Add 'curtain' rectangle to hide entire graph */
-  var curtain = svg.append('rect')
-    .attr('x', -1 * width)
-    .attr('y', -1 * height)
-    .attr('height', height)
-    .attr('width', width)
-    .attr('class', 'curtain')
-    .attr('transform', 'rotate(180)')
-    .style('fill', '#ffffff')
-
-  /* Optionally add a guideline */
-  var guideline = svg.append('line')
-    .attr('stroke', '#333')
-    .attr('stroke-width', 0)
-    .attr('class', 'guide')
-    .attr('x1', 1)
-    .attr('y1', 1)
-    .attr('x2', 1)
-    .attr('y2', height)
-
-  /* Create a shared transition for anything we're animating */
-  var t = svg.transition()
-    .delay(750)
-    .duration(6000)
-    .ease('linear')
-    .each('end', function() {
-      d3.select('line.guide')
-        .transition()
-        .style('opacity', 0)
-        .remove()
-    });
-
-  t.select('rect.curtain')
-    .attr('width', 0);
-  t.select('line.guide')
-    .attr('transform', 'translate(' + width + ', 0)')
-
-  d3.select("#show_guideline").on("change", function(e) {
-    guideline.attr('stroke-width', this.checked ? 1 : 0);
-    curtain.attr("opacity", this.checked ? 0.75 : 1);
-  })
+//http://bl.ocks.org/mbostock/7555321
+//This code wraps label text if it has too much text
+function wrap(text, width) {
+  text.each(function() {
+    var text = d3.select(this),
+        words = text.text().split(/\s+/).reverse(),
+        word,
+        line = [],
+        lineNumber = 0,
+        lineHeight = 1.1, // ems
+        y = text.attr("y"),
+        dy = parseFloat(text.attr("dy")),
+        tspan = text.text(null).append("tspan").attr("x", 0).attr("y", y).attr("dy", dy + "em");
+    while (word = words.pop()) {
+      line.push(word);
+      tspan.text(line.join(" "));
+      if (tspan.node().getComputedTextLength() > width) {
+        line.pop();
+        tspan.text(line.join(" "));
+        line = [word];
+        tspan = text.append("tspan").attr("x", 0).attr("y", y).attr("dy", ++lineNumber * lineHeight + dy + "em").text(word);
+      }
+    }
+  });
+}
 
 });
 
-// Parse dates and numbers. We assume values are sorted by date.
-function type(d) {
-  d.date = parse(d.date);
-  d.price = +d.price;
-  return d;
-}
-
 </script>
-</body>
-</html>
